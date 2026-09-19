@@ -2924,6 +2924,14 @@ select.param-inp{
   box-shadow:0 8px 28px rgba(0,0,0,.5);
 }
 #toast.show{opacity:1;}
+#toast.toast-top-right{
+  left:auto;
+  right:16px;
+  top:calc(env(safe-area-inset-top, 0px) + 16px);
+  transform:none;
+  text-align:left;
+  max-width:min(360px, calc(100vw - 32px));
+}
 #toast.ok{border-color:var(--green);color:var(--green);}
 #toast.err{border-color:var(--red);color:var(--red);}
 
@@ -2931,6 +2939,11 @@ select.param-inp{
   #toast{
     font-size:14px;padding:12px 28px;
     max-width:min(480px,88vw);
+  }
+  #toast.toast-top-right{
+    right:12px;
+    top:calc(env(safe-area-inset-top, 0px) + 12px);
+    max-width:min(420px, calc(100vw - 24px));
   }
 }
 
@@ -4406,6 +4419,14 @@ body.nw-swap-mode .nw-shelf-card{opacity:.4; pointer-events:none;}
         oninput="NAIM.cfg.setTA(this.value)">
       <div class="cfg-reset" onclick="NAIM.cfg.setTA(100)">↺ 기본값으로 초기화</div>
       <div class="cfg-hint">프롬프트 · 네거티브 · 후행 · 캐릭터 프롬프트 세로 높이.</div>
+    </div>
+
+    <div class="cfg-section">
+      <div data-tour-key="cfg-notice" style="font-size:10px;color:var(--acc);letter-spacing:.08em;padding:6px 0 4px;border-bottom:1px solid var(--b1);margin-bottom:2px;">🔔 알림</div>
+      <div class="ps-row">
+        <div><div class="ps-lbl">생성 완료 알림 표시</div><div class="ps-desc">이미지 생성 완료 시 우측 상단 안내 표시</div></div>
+        <label class="toggle-switch"><input type="checkbox" id="genDoneToastToggle" checked onchange="saveSettings()"><span class="toggle-slider"></span></label>
+      </div>
     </div>
 
     <!-- Phase 7 Step F — 도움말 -->
@@ -6188,12 +6209,13 @@ function buildFullPrompt(snap){
    - 매칭마다 랜덤 1개 선택
    - 빈 옵션 가능 (예: ||a||b||  → 3개 옵션 중 하나; 빈 옵션 뽑히면 빈 문자열)
    - 매 호출마다 새로 굴림 (같은 시드라도 randomizer 결과 매번 바뀜 — NAI 공식 동작 일치)
-   - 캐릭 multi-character 의 | 구분자와 충돌 X (외곽 || 패턴이 다름)
+   - 와일드카드 slot 지시자는 [slots:1=...;2=...] 처럼 ; 로 구분
 */
 const _NAIM_GROUP_TOKEN_RE = /[ \t]*,?[ \t]*\n?[ \t]*\.\.([^.\n][^\n]*?)\.\.[ \t]*\n?/g;
 const _NAIM_TOKEN_RE = /\.\.([^.\n][^\n]*?)\.\./g;
 const _NAIM_SLOTS_PREFIX = '[slots:';
 const _NAIM_MAX_CHAR_SLOTS = 6;
+const _NAIM_SLOT_SEPARATORS = [';', '|'];
 function _makeWildcardExpansionContext(){
   return { slotAdditions: Array.from({length:_NAIM_MAX_CHAR_SLOTS}, ()=>[]) };
 }
@@ -6245,7 +6267,7 @@ function _splitEscaped(text, sep){
   return out;
 }
 function _unescapeSlotsValue(text){
-  return String(text == null ? '' : text).replace(/\\([\\|\]])/g, '$1');
+  return String(text == null ? '' : text).replace(/\\([\\;\|\]])/g, '$1');
 }
 function _stripWildcardSlotsDirective(text, ctx){
   const src = String(text == null ? '' : text);
@@ -6256,7 +6278,8 @@ function _stripWildcardSlotsDirective(text, ctx){
   if(close < 0) return { text: src, parsed: false };
   if(src.slice(close + 1).trim()) return { text: src, parsed: false };
   const body = src.slice(start + _NAIM_SLOTS_PREFIX.length, close);
-  const parts = _splitEscaped(body, '|');
+  const sep = _NAIM_SLOT_SEPARATORS.find(ch => _findUnescapedChar(body, ch, 0) >= 0) || ';';
+  const parts = _splitEscaped(body, sep);
   if(parts.length === 0) return { text: src, parsed: false };
   const parsed = [];
   for(const rawPart of parts){
@@ -6323,21 +6346,28 @@ function _runWildcardInlineSlotsSelfTest(){
     }],
     ['directive strips and routes', ()=>{
       const ctx = makeCtx();
-      const out = _stripWildcardSlotsDirective('pat head [slots:1=head pat|2=happy]', ctx);
+      const out = _stripWildcardSlotsDirective('pat head [slots:1=head pat;2=happy]', ctx);
       return out.text === 'pat head' &&
         (ctx.slotAdditions[0] || []).join('|') === 'head pat' &&
         (ctx.slotAdditions[1] || []).join('|') === 'happy';
     }],
     ['repeated slot preserves order', ()=>{
       const ctx = makeCtx();
-      _stripWildcardSlotsDirective('pose [slots:1=tag a|1=tag b]', ctx);
+      _stripWildcardSlotsDirective('pose [slots:1=tag a;1=tag b]', ctx);
       return (ctx.slotAdditions[0] || []).join('|') === 'tag a|tag b';
     }],
     ['malformed preserved', ()=>{
       const ctx = makeCtx();
-      const raw = 'pose [slots:1=tag a|oops]';
+      const raw = 'pose [slots:1=tag a;oops]';
       const out = _stripWildcardSlotsDirective(raw, ctx);
       return out.text === raw && ctx.slotAdditions.every(arr => arr.length === 0);
+    }],
+    ['legacy separator still reads', ()=>{
+      const ctx = makeCtx();
+      const out = _stripWildcardSlotsDirective('pose [slots:1=tag a|2=tag b]', ctx);
+      return out.text === 'pose' &&
+        (ctx.slotAdditions[0] || []).join('|') === 'tag a' &&
+        (ctx.slotAdditions[1] || []).join('|') === 'tag b';
     }],
     ['merge trims commas', ()=>{
       return _mergePromptFragments('foo, ', ' , bar ') === 'foo, bar' &&
@@ -9507,6 +9537,7 @@ function _collectSettings(){
   data.activeStylePrompt = _activeStylePrompt;
   data.useCoords = _useCoords;
   data.hidden = _hidden;
+  data.genDoneToastEnabled = document.getElementById('genDoneToastToggle')?.checked ?? true;
   return data;
 }
 
@@ -9636,6 +9667,8 @@ function _loadSettingsInner(){
   // Phase 149 — ❓ 숨김 상태 복원 (FIELD_IDS_V4 로 checked 복원됨 → body 클래스 반영)
   const helpTog = document.getElementById('helpBtnToggle');
   if(helpTog) document.body.classList.toggle('hide-help', helpTog.checked);
+  const genDoneTog = document.getElementById('genDoneToastToggle');
+  if(genDoneTog) genDoneTog.checked = data.genDoneToastEnabled !== false;
   const tacMob = document.getElementById('tacEnabledMob');
   if(tacMob) setTacEnabled(tacMob.checked);
   if(data.activeStyleName){
@@ -10011,7 +10044,8 @@ function toggleVariety(){
     const el = document.getElementById('toast');
     if(!el) return;
     el.textContent = msg;
-    el.className = 'show ' + (type || '');
+    const posClass = opts && opts.pos === 'top-right' ? 'toast-top-right' : '';
+    el.className = ['show', type || '', posClass].filter(Boolean).join(' ');
     clearTimeout(_tt);
     if(opts && opts.persist){
       _tt = null;
@@ -10913,7 +10947,9 @@ function toggleVariety(){
           // 사용자 결정: 갤러리 카드는 라벨 없음, prompt tooltip + Step E 상세보기로 충분.
           // Phase 27: 순차 생성 제거됨 — _seqLabel 분기 삭제, lbl 항상 빈 문자열.
           NAIM.gallery.add(blob, '', userPrompt);
-          NAIM.toast(`#${item.id} 생성 완료`, 'ok');
+          if(document.getElementById('genDoneToastToggle')?.checked ?? true){
+            NAIM.toast(`#${item.id} 생성 완료`, 'ok', {pos:'top-right'});
+          }
         }catch(e){
           console.error('[gen] gallery 추가 실패:', e);
           NAIM.toast(`#${item.id} 갤러리 추가 실패`, 'err');
@@ -18689,8 +18725,8 @@ const NAIMWildcard = (function(){
           <option value="other"${curCat==='other'?' selected':''}>기타</option>
         </select>
         <input class="nw-modal-input" id="nw-cc-name" type="text" placeholder="카드 이름 (필수·중복 불가)" value="${curName.replace(/"/g,'&quot;')}">
-        <textarea class="nw-modal-input" id="nw-cc-pool" placeholder="태그를 한 줄에 하나씩 입력&#10;예:&#10;cat,&#10;dog,&#10;A character gently pats another character&apos;s head. [slots:1=head pat, hand on head|2=being patted, happy]">${curPool.replace(/</g,'&lt;')}</textarea>
-        <div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.45;">각 줄 끝에 <span style="color:var(--acc);font-family:var(--mono);">[slots:1=...|2=...]</span> 를 붙이면, 그 줄이 뽑혔을 때 C1~C6 프롬프트에 태그를 임시로 추가합니다. 저장 데이터와 화면 입력칸은 바뀌지 않습니다.</div>
+        <textarea class="nw-modal-input" id="nw-cc-pool" placeholder="태그를 한 줄에 하나씩 입력&#10;예:&#10;cat,&#10;dog,&#10;A character gently pats another character&apos;s head. [slots:1=head pat, hand on head;2=being patted, happy]">${curPool.replace(/</g,'&lt;')}</textarea>
+        <div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.45;">각 줄 끝에 <span style="color:var(--acc);font-family:var(--mono);">[slots:1=...;2=...]</span> 를 붙이면, 그 줄이 뽑혔을 때 C1~C6 프롬프트에 태그를 임시로 추가합니다. 저장 데이터와 화면 입력칸은 바뀌지 않습니다. 기존 <span style="font-family:var(--mono);">|</span> 구분자도 읽기는 하지만, <span style="font-family:var(--mono);">||a|b||</span> 랜덤 프롬프트와 함께 쓸 때는 <span style="font-family:var(--mono);">;</span> 구분자를 권장합니다.</div>
         <div class="nw-modal-foot">
           ${editing ? '<button class="nw-modal-btn" data-act="del" style="margin-right:auto;color:#ff6b6b;">삭제</button>' : ''}
           <button class="nw-modal-btn" data-act="cancel">취소</button>
@@ -20334,7 +20370,7 @@ body.tour-mob #tourNavBtns{display:none;}
       },
       {
         key:'deck.groups', target:'nw-groups-area', title:'와일드카드 사용 방법',
-        text:'이 화면에서 후보 목록을 만들어 둡니다.\n\n＋그룹은 후보를 담는 상자이고, 카드는 그 안에 들어가는 실제 태그입니다.\n\n프롬프트에 `..1..`을 넣으면, 생성할 때 1번 그룹의 카드 중 하나가 그 자리에 자동으로 들어갑니다.\n\n각 후보 줄 끝에는 `[slots:1=...|2=...]` 를 붙여서, 그 줄이 뽑혔을 때 C1~C6 프롬프트에만 임시 태그를 함께 보낼 수도 있습니다.\n\n와일드카드를 잠시 쓰지 않으려면 적용 ON/OFF를 끄면 됩니다.',
+        text:'이 화면에서 후보 목록을 만들어 둡니다.\n\n＋그룹은 후보를 담는 상자이고, 카드는 그 안에 들어가는 실제 태그입니다.\n\n프롬프트에 `..1..`을 넣으면, 생성할 때 1번 그룹의 카드 중 하나가 그 자리에 자동으로 들어갑니다.\n\n각 후보 줄 끝에는 `[slots:1=...;2=...]` 를 붙여서, 그 줄이 뽑혔을 때 C1~C6 프롬프트에만 임시 태그를 함께 보낼 수도 있습니다.\n\n`||a|b||` 랜덤 프롬프트와 같이 쓸 때는 slot 항목 구분자를 `;` 로 적으면 충돌하지 않습니다.\n\n와일드카드를 잠시 쓰지 않으려면 적용 ON/OFF를 끄면 됩니다.',
         before:function(){ actMain('extras'); setTimeout(function(){ if(NAIM.tour && NAIM.tour.active) NAIM.tour.reposition(); }, 120); }
       },
       {
@@ -20491,7 +20527,7 @@ body.tour-mob #tourNavBtns{display:none;}
       { key:'deck.apply', sel:'#wildcardApplyToggle', title:'와일드카드 켜고 끄기', before:toDeckReflow,
         text:'적용 ON/OFF로 와일드카드 사용 여부를 바꿀 수 있습니다.\n\nOFF로 두면 프롬프트에 토큰이 있어도 와일드카드가 동작하지 않습니다.\n\n같은 프롬프트로 고정해서 만들고 싶을 때는 OFF로 두면 됩니다.' },
       { target:'nw-card-list', title:'카드 추가와 편집', before:toDeckReflow,
-        text:'카드 목록 맨 끝의 점선 ＋ 칸을 누르면 나만의 카드를 만들 수 있습니다.\n\n아이콘과 분류를 고르고, 사용할 태그를 한 줄에 하나씩 적으면 됩니다.\n\n베이스 문장 뒤에 `[slots:1=tag a|2=tag b]` 형식을 붙이면, 그 줄이 뽑혔을 때 해당 캐릭터 슬롯 프롬프트에 태그가 함께 추가됩니다.\n\n이미 있는 카드도 수정할 수 있습니다. PC에서는 카드를 마우스 오른쪽 클릭, 모바일에서는 길게 누르면 편집 창이 열립니다.\n\n이제 기본 카드와 사용자 카드가 따로 구분되지 않습니다. 수정하면 해당 카드 내용이 바뀌고, 삭제하면 새로고침해도 다시 돌아오지 않습니다. 중요한 카드는 데이터관리에서 먼저 백업해두는 것이 좋습니다.' }
+        text:'카드 목록 맨 끝의 점선 ＋ 칸을 누르면 나만의 카드를 만들 수 있습니다.\n\n아이콘과 분류를 고르고, 사용할 태그를 한 줄에 하나씩 적으면 됩니다.\n\n베이스 문장 뒤에 `[slots:1=tag a;2=tag b]` 형식을 붙이면, 그 줄이 뽑혔을 때 해당 캐릭터 슬롯 프롬프트에 태그가 함께 추가됩니다.\n\n`||a|b||` 랜덤 프롬프트를 같이 넣고 싶다면 slot 항목 구분자는 `;` 를 쓰면 됩니다.\n\n이미 있는 카드도 수정할 수 있습니다. PC에서는 카드를 마우스 오른쪽 클릭, 모바일에서는 길게 누르면 편집 창이 열립니다.\n\n이제 기본 카드와 사용자 카드가 따로 구분되지 않습니다. 수정하면 해당 카드 내용이 바뀌고, 삭제하면 새로고침해도 다시 돌아오지 않습니다. 중요한 카드는 데이터관리에서 먼저 백업해두는 것이 좋습니다.' }
     ];
   }
   function startDeckTour(){ start(deckTourSteps(), {}); }
