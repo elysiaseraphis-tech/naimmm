@@ -6287,6 +6287,18 @@ function _parseWildcardSlotsBody(body, sep){
   }
   return parsed;
 }
+function _selectWildcardSlotsSeparator(body){
+  const src = String(body == null ? '' : body);
+  for(let i = 0; i < src.length; i++){
+    const ch = src[i];
+    if(!_NAIM_SLOT_SEPARATORS.includes(ch)) continue;
+    let slashCount = 0;
+    for(let j = i - 1; j >= 0 && src[j] === '\\'; j--) slashCount++;
+    if((slashCount % 2) !== 0) continue;
+    if(_parseWildcardSlotsBody(src, ch)) return ch;
+  }
+  return null;
+}
 function _stripWildcardSlotsDirective(text, ctx){
   const src = String(text == null ? '' : text);
   const lower = src.toLowerCase();
@@ -6296,9 +6308,8 @@ function _stripWildcardSlotsDirective(text, ctx){
   if(close < 0) return { text: src, parsed: false };
   if(src.slice(close + 1).trim()) return { text: src, parsed: false };
   const body = src.slice(start + _NAIM_SLOTS_PREFIX.length, close);
-  const parsed = _NAIM_SLOT_SEPARATORS
-    .map(ch => _parseWildcardSlotsBody(body, ch))
-    .find(Boolean);
+  const sep = _selectWildcardSlotsSeparator(body);
+  const parsed = sep ? _parseWildcardSlotsBody(body, sep) : null;
   if(!parsed) return { text: src, parsed: false };
   if(ctx) parsed.forEach(p => _queueSlotAddition(ctx, p.slotIndex, p.value));
   return {
