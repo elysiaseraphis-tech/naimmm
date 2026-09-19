@@ -6278,7 +6278,10 @@ function _stripWildcardSlotsDirective(text, ctx){
   if(close < 0) return { text: src, parsed: false };
   if(src.slice(close + 1).trim()) return { text: src, parsed: false };
   const body = src.slice(start + _NAIM_SLOTS_PREFIX.length, close);
-  const sep = _NAIM_SLOT_SEPARATORS.find(ch => _findUnescapedChar(body, ch, 0) >= 0) || ';';
+  const sep = _NAIM_SLOT_SEPARATORS
+    .map(ch => ({ ch, idx: _findUnescapedChar(body, ch, 0) }))
+    .filter(item => item.idx >= 0)
+    .sort((a, b) => a.idx - b.idx)[0]?.ch || ';';
   const parts = _splitEscaped(body, sep);
   if(parts.length === 0) return { text: src, parsed: false };
   const parsed = [];
