@@ -6278,10 +6278,12 @@ function _stripWildcardSlotsDirective(text, ctx){
   if(close < 0) return { text: src, parsed: false };
   if(src.slice(close + 1).trim()) return { text: src, parsed: false };
   const body = src.slice(start + _NAIM_SLOTS_PREFIX.length, close);
-  const sep = _NAIM_SLOT_SEPARATORS
+  const foundSeps = _NAIM_SLOT_SEPARATORS
     .map(ch => ({ ch, idx: _findUnescapedChar(body, ch, 0) }))
     .filter(item => item.idx >= 0)
-    .sort((a, b) => a.idx - b.idx)[0]?.ch || ';';
+    .sort((a, b) => a.idx - b.idx);
+  if(foundSeps.length > 1) return { text: src, parsed: false };
+  const sep = foundSeps[0]?.ch || ';';
   const parts = _splitEscaped(body, sep);
   if(parts.length === 0) return { text: src, parsed: false };
   const parsed = [];
@@ -6371,6 +6373,12 @@ function _runWildcardInlineSlotsSelfTest(){
       return out.text === 'pose' &&
         (ctx.slotAdditions[0] || []).join('|') === 'tag a' &&
         (ctx.slotAdditions[1] || []).join('|') === 'tag b';
+    }],
+    ['mixed separators rejected', ()=>{
+      const ctx = makeCtx();
+      const raw = 'pose [slots:1=tag a|2=tag b;3=tag c]';
+      const out = _stripWildcardSlotsDirective(raw, ctx);
+      return out.text === raw && ctx.slotAdditions.every(arr => arr.length === 0);
     }],
     ['merge trims commas', ()=>{
       return _mergePromptFragments('foo, ', ' , bar ') === 'foo, bar' &&
