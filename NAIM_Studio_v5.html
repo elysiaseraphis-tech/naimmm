@@ -6287,6 +6287,17 @@ function _parseWildcardSlotsBody(body, sep){
   }
   return parsed;
 }
+function _findWildcardSlotSeparatorIndex(body, sep){
+  const src = String(body == null ? '' : body);
+  for(let i = 0; i < src.length; i++){
+    if(src[i] !== sep) continue;
+    let slashCount = 0;
+    for(let j = i - 1; j >= 0 && src[j] === '\\'; j--) slashCount++;
+    if((slashCount % 2) !== 0) continue;
+    if(/^\s*\d+\s*=/.test(src.slice(i + 1))) return i;
+  }
+  return -1;
+}
 function _stripWildcardSlotsDirective(text, ctx){
   const src = String(text == null ? '' : text);
   const lower = src.toLowerCase();
@@ -6297,7 +6308,7 @@ function _stripWildcardSlotsDirective(text, ctx){
   if(src.slice(close + 1).trim()) return { text: src, parsed: false };
   const body = src.slice(start + _NAIM_SLOTS_PREFIX.length, close);
   const parsed = _NAIM_SLOT_SEPARATORS
-    .map(ch => ({ idx: _findUnescapedChar(body, ch, 0), parsed: _parseWildcardSlotsBody(body, ch) }))
+    .map(ch => ({ idx: _findWildcardSlotSeparatorIndex(body, ch), parsed: _parseWildcardSlotsBody(body, ch) }))
     .filter(item => item.idx >= 0)
     .sort((a, b) => a.idx - b.idx)
     .map(item => item.parsed)
