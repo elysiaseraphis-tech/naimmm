@@ -6287,6 +6287,18 @@ function _parseWildcardSlotsBody(body, sep){
   }
   return parsed;
 }
+function _hasWildcardSlotAltSeparatorConflict(value, sep){
+  const altSep = sep === ';' ? '|' : ';';
+  const src = String(value == null ? '' : value);
+  for(let i = 0; i < src.length; i++){
+    if(src[i] !== altSep) continue;
+    let slashCount = 0;
+    for(let j = i - 1; j >= 0 && src[j] === '\\'; j--) slashCount++;
+    if((slashCount % 2) !== 0) continue;
+    if(/^\s*\d+\s*=/.test(src.slice(i + 1))) return true;
+  }
+  return false;
+}
 function _findWildcardSlotSeparatorIndex(body, sep){
   const src = String(body == null ? '' : body);
   for(let i = 0; i < src.length; i++){
@@ -6324,7 +6336,12 @@ function _stripWildcardSlotsDirective(text, ctx){
     })
     .map(item => item.ch);
   const order = explicitSeps.length ? explicitSeps : _NAIM_SLOT_SEPARATORS;
-  const parsed = order.map(ch => _parseWildcardSlotsBody(body, ch)).find(Boolean);
+  const parsed = order.map(ch => {
+    const out = _parseWildcardSlotsBody(body, ch);
+    if(!out) return null;
+    if(out.some(entry => _hasWildcardSlotAltSeparatorConflict(entry.value, ch))) return null;
+    return out;
+  }).find(Boolean);
   if(!parsed) return { text: src, parsed: false };
   if(ctx) parsed.forEach(p => _queueSlotAddition(ctx, p.slotIndex, p.value));
   return {
@@ -6402,6 +6419,12 @@ function _runWildcardInlineSlotsSelfTest(){
     ['malformed later entry preserved', ()=>{
       const ctx = makeCtx();
       const raw = 'pose [slots:1=tag a;foo=bar]';
+      const out = _stripWildcardSlotsDirective(raw, ctx);
+      return out.text === raw && ctx.slotAdditions.every(arr => arr.length === 0);
+    }],
+    ['mixed slot separators preserved', ()=>{
+      const ctx = makeCtx();
+      const raw = 'pose [slots:1=tag a;2=tag b|3=tag c]';
       const out = _stripWildcardSlotsDirective(raw, ctx);
       return out.text === raw && ctx.slotAdditions.every(arr => arr.length === 0);
     }],
@@ -9574,6 +9597,9 @@ _verifyFieldMapping(); // Step A 시점 1회 실행
 
 // ── _settingsMem (v4 7683 그대로 — null 시작이 정상) ──
 let _settingsMem = null;
+function _isGenDoneToastEnabled(){
+  return !_settingsMem || _settingsMem.genDoneToastEnabled !== false;
+}
 
 // ── _collectSettings (v4 7685~7708 본문 로직 그대로, 저장 키만 v4 스키마로 통일) ──
 function _collectSettings(){
@@ -11011,7 +11037,7 @@ function toggleVariety(){
           // 사용자 결정: 갤러리 카드는 라벨 없음, prompt tooltip + Step E 상세보기로 충분.
           // Phase 27: 순차 생성 제거됨 — _seqLabel 분기 삭제, lbl 항상 빈 문자열.
           NAIM.gallery.add(blob, '', userPrompt);
-          if(document.getElementById('genDoneToastToggle')?.checked ?? true){
+          if(_isGenDoneToastEnabled()){
             NAIM.toast(`#${item.id} 생성 완료`, 'ok', {pos:'top-right'});
           }
         }catch(e){
