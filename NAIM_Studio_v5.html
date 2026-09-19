@@ -6323,6 +6323,9 @@ function _stripWildcardSlotsDirective(text, ctx){
       return ai - bi;
     })
     .map(item => item.ch);
+  if(sepMeta.filter(item => item.topLevelIdx >= 0).length > 1){
+    return { text: src, parsed: false };
+  }
   const order = explicitSeps.length ? explicitSeps : _NAIM_SLOT_SEPARATORS;
   const parsed = order.map(ch => _parseWildcardSlotsBody(body, ch)).find(Boolean);
   if(!parsed) return { text: src, parsed: false };
@@ -6402,6 +6405,12 @@ function _runWildcardInlineSlotsSelfTest(){
     ['malformed later entry preserved', ()=>{
       const ctx = makeCtx();
       const raw = 'pose [slots:1=tag a;foo=bar]';
+      const out = _stripWildcardSlotsDirective(raw, ctx);
+      return out.text === raw && ctx.slotAdditions.every(arr => arr.length === 0);
+    }],
+    ['mixed top-level separators preserved', ()=>{
+      const ctx = makeCtx();
+      const raw = 'pose [slots:1=tag a;2=tag b|3=tag c]';
       const out = _stripWildcardSlotsDirective(raw, ctx);
       return out.text === raw && ctx.slotAdditions.every(arr => arr.length === 0);
     }],
