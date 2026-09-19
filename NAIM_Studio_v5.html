@@ -6323,10 +6323,13 @@ function _stripWildcardSlotsDirective(text, ctx){
       return ai - bi;
     })
     .map(item => item.ch);
-  if(sepMeta.filter(item => item.topLevelIdx >= 0).length > 1){
+  const topLevelSeps = sepMeta.filter(item => item.topLevelIdx >= 0).sort((a, b) => a.topLevelIdx - b.topLevelIdx);
+  if(topLevelSeps.length > 1){
     return { text: src, parsed: false };
   }
-  const order = explicitSeps.length ? explicitSeps : _NAIM_SLOT_SEPARATORS;
+  const order = topLevelSeps.length
+    ? [topLevelSeps[0].ch]
+    : (explicitSeps.length ? explicitSeps : _NAIM_SLOT_SEPARATORS);
   const parsed = order.map(ch => _parseWildcardSlotsBody(body, ch)).find(Boolean);
   if(!parsed) return { text: src, parsed: false };
   if(ctx) parsed.forEach(p => _queueSlotAddition(ctx, p.slotIndex, p.value));
