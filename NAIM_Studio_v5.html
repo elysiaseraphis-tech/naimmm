@@ -6297,13 +6297,8 @@ function _stripWildcardSlotsDirective(text, ctx){
   if(src.slice(close + 1).trim()) return { text: src, parsed: false };
   const body = src.slice(start + _NAIM_SLOTS_PREFIX.length, close);
   const parsed = _NAIM_SLOT_SEPARATORS
-    .map(ch => ({ ch, idx: _findUnescapedChar(body, ch, 0), parsed: _parseWildcardSlotsBody(body, ch) }))
-    .filter(item => item.parsed)
-    .sort((a, b) => {
-      const ai = a.idx < 0 ? Number.MAX_SAFE_INTEGER : a.idx;
-      const bi = b.idx < 0 ? Number.MAX_SAFE_INTEGER : b.idx;
-      return ai - bi;
-    })[0]?.parsed;
+    .map(ch => _parseWildcardSlotsBody(body, ch))
+    .find(Boolean);
   if(!parsed) return { text: src, parsed: false };
   if(ctx) parsed.forEach(p => _queueSlotAddition(ctx, p.slotIndex, p.value));
   return {
@@ -6379,6 +6374,13 @@ function _runWildcardInlineSlotsSelfTest(){
       return out.text === 'pose' &&
         (ctx.slotAdditions[0] || []).join('|') === 'tag a' &&
         (ctx.slotAdditions[1] || []).join('|') === 'tag b';
+    }],
+    ['legacy separator keeps semicolon in value', ()=>{
+      const ctx = makeCtx();
+      const out = _stripWildcardSlotsDirective('pose [slots:1=tag a;b|2=tag c]', ctx);
+      return out.text === 'pose' &&
+        (ctx.slotAdditions[0] || []).join('|') === 'tag a;b' &&
+        (ctx.slotAdditions[1] || []).join('|') === 'tag c';
     }],
     ['top-level separator disambiguation', ()=>{
       const ctx = makeCtx();
