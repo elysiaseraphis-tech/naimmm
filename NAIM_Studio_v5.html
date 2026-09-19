@@ -6307,12 +6307,13 @@ function _stripWildcardSlotsDirective(text, ctx){
   if(close < 0) return { text: src, parsed: false };
   if(src.slice(close + 1).trim()) return { text: src, parsed: false };
   const body = src.slice(start + _NAIM_SLOTS_PREFIX.length, close);
-  const parsed = _NAIM_SLOT_SEPARATORS
-    .map(ch => ({ idx: _findWildcardSlotSeparatorIndex(body, ch), parsed: _parseWildcardSlotsBody(body, ch) }))
+  const sepCandidates = _NAIM_SLOT_SEPARATORS
+    .map(ch => ({ ch, idx: _findWildcardSlotSeparatorIndex(body, ch) }))
     .filter(item => item.idx >= 0)
     .sort((a, b) => a.idx - b.idx)
-    .map(item => item.parsed)
-    .find(Boolean);
+    .map(item => item.ch);
+  const order = sepCandidates.length ? sepCandidates : _NAIM_SLOT_SEPARATORS;
+  const parsed = order.map(ch => _parseWildcardSlotsBody(body, ch)).find(Boolean);
   if(!parsed) return { text: src, parsed: false };
   if(ctx) parsed.forEach(p => _queueSlotAddition(ctx, p.slotIndex, p.value));
   return {
@@ -6371,6 +6372,11 @@ function _runWildcardInlineSlotsSelfTest(){
         (ctx.slotAdditions[0] || []).join('|') === 'head pat' &&
         (ctx.slotAdditions[1] || []).join('|') === 'happy';
     }],
+    ['single slot without separator', ()=>{
+      const ctx = makeCtx();
+      const out = _stripWildcardSlotsDirective('pose [slots:1=solo tag]', ctx);
+      return out.text === 'pose' && (ctx.slotAdditions[0] || []).join('|') === 'solo tag';
+    }],
     ['repeated slot preserves order', ()=>{
       const ctx = makeCtx();
       _stripWildcardSlotsDirective('pose [slots:1=tag a;1=tag b]', ctx);
@@ -6402,6 +6408,13 @@ function _runWildcardInlineSlotsSelfTest(){
       return out.text === 'pose' &&
         (ctx.slotAdditions[0] || []).join('|') === 'tag a|b' &&
         (ctx.slotAdditions[1] || []).join('|') === 'tag c';
+    }],
+    ['escaped separators preserved', ()=>{
+      const ctx = makeCtx();
+      const out = _stripWildcardSlotsDirective('pose [slots:1=tag a\\;b;2=tag c\\|d]', ctx);
+      return out.text === 'pose' &&
+        (ctx.slotAdditions[0] || []).join('|') === 'tag a;b' &&
+        (ctx.slotAdditions[1] || []).join('|') === 'tag c|d';
     }],
     ['merge trims commas', ()=>{
       return _mergePromptFragments('foo, ', ' , bar ') === 'foo, bar' &&
