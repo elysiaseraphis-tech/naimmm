@@ -123,6 +123,54 @@ window.NAIMExif = (function(){
   document.addEventListener('DOMContentLoaded', function(){ window.setNaimTheme(saved); }, {once:true});
 })();
 </script>
+<script>
+(function(){
+  function syncFullscreen(enabled){
+    const toggle = document.getElementById('naim-fullscreen');
+    if(toggle) toggle.checked = !!enabled;
+  }
+  window.NaimAndroid = {
+    onFullscreenChanged: syncFullscreen,
+    async toggleFullscreen(toggle){
+      const enabled = toggle.checked;
+      try{
+        if(window.AndroidNative && typeof AndroidNative.setFullscreen === 'function'){
+          AndroidNative.setFullscreen(enabled);
+        }else{
+          if(enabled){
+            if(!document.documentElement.requestFullscreen) throw new Error('Fullscreen unavailable');
+            await document.documentElement.requestFullscreen();
+          }else if(document.fullscreenElement){
+            await document.exitFullscreen();
+          }
+          syncFullscreen(!!document.fullscreenElement);
+        }
+      }catch(_){
+        syncFullscreen(!!document.fullscreenElement);
+        if(window.NAIM) NAIM.toast('전체화면을 전환할 수 없습니다.', 'err');
+      }
+    },
+    openBackgroundSettings(){
+      try{
+        if(window.AndroidNative && typeof AndroidNative.openBackgroundSettings === 'function'){
+          AndroidNative.openBackgroundSettings();
+        }
+      }catch(_){
+        if(window.NAIM) NAIM.toast('설정 → 앱 → NAIM Studio → 배터리에서 확인해 주세요.', 'err');
+      }
+    }
+  };
+  document.addEventListener('fullscreenchange', function(){
+    if(!(window.AndroidNative && typeof AndroidNative.setFullscreen === 'function')){
+      syncFullscreen(!!document.fullscreenElement);
+    }
+  });
+  document.addEventListener('DOMContentLoaded', function(){
+    const settings = document.getElementById('android-background-settings');
+    if(settings) settings.hidden = !(window.AndroidNative && typeof AndroidNative.openBackgroundSettings === 'function');
+  }, {once:true});
+})();
+</script>
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
    NAIM Studio v5 — Phase 1 골조 (skeleton)
@@ -3959,7 +4007,7 @@ body.nw-swap-mode .nw-shelf-card{opacity:.4; pointer-events:none;}
         <div class="fullscreen-wrap">
           <span class="lbl">FULL</span>
           <label class="toggle-switch" title="전체화면">
-            <input type="checkbox" onchange="if(this.checked){document.documentElement.requestFullscreen?.().catch(()=>{this.checked=false;NAIM.toast('전체화면 거부됨','err');});}else{document.exitFullscreen?.();}">
+            <input id="naim-fullscreen" type="checkbox" onchange="NaimAndroid.toggleFullscreen(this)">
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -4521,6 +4569,11 @@ body.nw-swap-mode .nw-shelf-card{opacity:.4; pointer-events:none;}
       </select>
     </div>
     <div class="cfg-hint">선택한 테마는 이 기기에 저장됩니다.</div>
+  </div>
+
+  <div class="cfg-section" id="android-background-settings" hidden>
+    <button class="btn btn-ghost btn-sm" onclick="NaimAndroid.openBackgroundSettings()">Android 백그라운드 설정</button>
+    <div class="cfg-hint">앱 정보 → 배터리 → 제한 없음으로 설정하세요. 생성 알림도 허용해 주세요. 생성 중 홈/다른 앱 전환은 가능하지만 최근 앱에서 제거하거나 강제 종료하지 마세요. 절전·네트워크·시스템 시간 제한으로 중단될 수 있습니다.</div>
   </div>
 
     <!-- Phase 37 — API 키 입력 (cfg-panel 최상단) -->
@@ -11340,6 +11393,7 @@ function toggleVariety(){
   async function processQueue(){
     if(processing) return;
     processing = true;
+    try{
     if(state !== 'paused') state = 'running';
     render();
     try{ if(window.AndroidNative && AndroidNative.generationStarted) AndroidNative.generationStarted(); }catch(_){}
@@ -11451,11 +11505,16 @@ function toggleVariety(){
       }
     }
 
-    processing = false;
-    state = 'idle';
-    render();
-    _persist();
-    try{ if(window.AndroidNative && AndroidNative.generationFinished) AndroidNative.generationFinished(); }catch(_){}
+    }finally{
+      processing = false;
+      state = 'idle';
+      try{
+        render();
+        _persist();
+      }finally{
+        try{ if(window.AndroidNative && AndroidNative.generationFinished) AndroidNative.generationFinished(); }catch(_){}
+      }
+    }
   }
 
   /* 치명적 에러 분류 — 큐 자동 정지 대상 */

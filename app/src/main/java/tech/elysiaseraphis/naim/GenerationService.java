@@ -6,7 +6,6 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
-import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 
@@ -41,7 +40,8 @@ public final class GenerationService extends Service {
     }
 
     private Notification buildNotification() {
-        Intent openIntent = new Intent(this, MainActivity.class);
+        Intent openIntent = new Intent(this, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 this, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, CHANNEL_ID)
@@ -51,6 +51,11 @@ public final class GenerationService extends Service {
                 .setOngoing(true)
                 .setContentIntent(pendingIntent)
                 .build();
+    }
+
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        stopSelf();
     }
 
     @Override

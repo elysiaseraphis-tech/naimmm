@@ -8,12 +8,20 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.provider.Settings;
+import android.view.DisplayCutout;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -24,6 +32,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+import android.widget.FrameLayout;
+import android.window.OnBackInvokedDispatcher;
 
 import org.json.JSONObject;
 
@@ -36,14 +46,68 @@ import java.util.Base64;
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 41;
     private static final int NOTIFICATION_REQUEST = 42;
+    private static final String STATE_FULLSCREEN = "naim.fullscreen";
+    private FrameLayout root;
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
+    private boolean fullscreen;
+    private boolean generationRunning;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        fullscreen = savedInstanceState != null && savedInstanceState.getBoolean(STATE_FULLSCREEN);
+        root = new FrameLayout(this);
+        TypedArray themeColors = obtainStyledAttributes(new int[]{android.R.attr.navigationBarColor});
+        root.setBackgroundColor(themeColors.getColor(0, Color.BLACK));
+        themeColors.recycle();
         webView = new WebView(this);
-        setContentView(webView);
+        root.addView(webView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        if (Build.VERSION.SDK_INT >= 30) {
+            getWindow().setDecorFitsSystemWindows(false);
+        }
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams attributes = getWindow().getAttributes();
+            attributes.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= 30
+                    ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                    : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(attributes);
+        }
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            if (Build.VERSION.SDK_INT >= 30) {
+                // Union takes the maximum on each edge, not navigation + keyboard height.
+                Insets safe = insets.getInsets(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+                root.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+                return WindowInsets.CONSUMED;
+            }
+            int left = insets.getSystemWindowInsetLeft();
+            int top = insets.getSystemWindowInsetTop();
+            int right = insets.getSystemWindowInsetRight();
+            int bottom = insets.getSystemWindowInsetBottom();
+            if (Build.VERSION.SDK_INT >= 28) {
+                DisplayCutout cutout = insets.getDisplayCutout();
+                if (cutout != null) {
+                    left = Math.max(left, cutout.getSafeInsetLeft());
+                    top = Math.max(top, cutout.getSafeInsetTop());
+                    right = Math.max(right, cutout.getSafeInsetRight());
+                    bottom = Math.max(bottom, cutout.getSafeInsetBottom());
+                }
+                insets = insets.consumeDisplayCutout();
+            }
+            root.setPadding(left, top, right, bottom);
+            return insets.consumeSystemWindowInsets().consumeStableInsets();
+        });
+        getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(
+                visibility -> root.requestApplyInsets());
+        setContentView(root);
+        applyFullscreen();
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::onBackPressed);
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -100,6 +164,7 @@ public final class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 injectNativeShare();
+                notifyFullscreenChanged();
             }
         });
         webView.setDownloadListener((url, userAgent, disposition, mimeType, length) -> {
@@ -125,11 +190,46 @@ public final class MainActivity extends Activity {
             }
         });
 
-        if (savedInstanceState == null) {
+        if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl("https://appassets.androidplatform.net/index.html");
-        } else {
-            webView.restoreState(savedInstanceState);
         }
+    }
+
+    private void applyFullscreen() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                if (fullscreen) controller.hide(WindowInsets.Type.systemBars());
+                else controller.show(WindowInsets.Type.systemBars());
+            }
+        } else {
+            // No LAYOUT_STABLE: hidden bars must not leave a permanently reserved gap.
+            int flags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            if (fullscreen) {
+                flags |= View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+            }
+            getWindow().getDecorView().setSystemUiVisibility(flags);
+        }
+        root.requestApplyInsets();
+    }
+
+    private void setFullscreen(boolean enabled) {
+        fullscreen = enabled;
+        applyFullscreen();
+        notifyFullscreenChanged();
+    }
+
+    private void notifyFullscreenChanged() {
+        webView.evaluateJavascript("window.NaimAndroid?.onFullscreenChanged?.(" + fullscreen + ");", null);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && root != null) applyFullscreen();
     }
 
     private void injectNativeShare() {
@@ -142,6 +242,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean(STATE_FULLSCREEN, fullscreen);
         webView.saveState(outState);
         super.onSaveInstanceState(outState);
     }
@@ -157,13 +258,19 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (fullscreen) {
+            setFullscreen(false);
+            return;
+        }
         String script = "(function(){const s=['#exifModal.open','#lightbox.open','#fileMgrModal.open'," +
                 "'#dataManageModal.open','#cfg-panel[data-open=\"true\"]'];" +
                 "const open=s.some(x=>document.querySelector(x));" +
                 "if(open)document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));return open;})()";
         webView.evaluateJavascript(script, value -> {
             if ("true".equals(value)) return;
-            if (webView.canGoBack()) webView.goBack(); else MainActivity.super.onBackPressed();
+            if (webView.canGoBack()) webView.goBack();
+            else if (generationRunning) moveTaskToBack(true);
+            else MainActivity.super.onBackPressed();
         });
     }
 
@@ -227,12 +334,35 @@ public final class MainActivity extends Activity {
     private final class AndroidBridge {
         @JavascriptInterface
         public void generationStarted() {
-            runOnUiThread(MainActivity.this::startGenerationService);
+            runOnUiThread(() -> {
+                generationRunning = true;
+                startGenerationService();
+            });
         }
 
         @JavascriptInterface
         public void generationFinished() {
-            runOnUiThread(MainActivity.this::stopGenerationService);
+            runOnUiThread(() -> {
+                generationRunning = false;
+                stopGenerationService();
+            });
+        }
+
+        @JavascriptInterface
+        public void setFullscreen(boolean enabled) {
+            runOnUiThread(() -> MainActivity.this.setFullscreen(enabled));
+        }
+
+        @JavascriptInterface
+        public void openBackgroundSettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (RuntimeException ignored) {
+                    // Some devices do not provide an app-details settings activity.
+                }
+            });
         }
 
         @JavascriptInterface
@@ -242,8 +372,11 @@ public final class MainActivity extends Activity {
             }
             runOnUiThread(() -> {
                 try {
-                    getWindow().setStatusBarColor(Color.parseColor(status));
-                    getWindow().setNavigationBarColor(Color.parseColor(navigation));
+                    int statusColor = Color.parseColor(status);
+                    int navigationColor = Color.parseColor(navigation);
+                    getWindow().setStatusBarColor(statusColor);
+                    getWindow().setNavigationBarColor(navigationColor);
+                    root.setBackgroundColor(navigationColor);
                 } catch (IllegalArgumentException ignored) {}
             });
         }
