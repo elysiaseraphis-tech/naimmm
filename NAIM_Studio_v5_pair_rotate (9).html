@@ -19,6 +19,34 @@
      msgpack: NAI 응답 기본 형식 (스트림 디코딩) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://unpkg.com/@msgpack/msgpack" crossorigin></script>
+<script src="exif-metadata.js"></script>
+<script>
+(function(){
+  const key = 'naim_color_theme';
+  const themes = {
+    classic:'#0d0d1a', amoled:'#000000', slate:'#111827', nord:'#242933',
+    dracula:'#1e1f29', cyberpunk:'#080b1a', forest:'#0c1712', wine:'#1b1018'
+  };
+  window.setNaimTheme = function(name){
+    if(!themes[name]) name = 'classic';
+    document.documentElement.dataset.theme = name;
+    document.querySelector('meta[name="theme-color"]').content = themes[name];
+    const select = document.getElementById('cfg-theme-select');
+    if(select && select.value !== name) select.value = name;
+    try{ localStorage.setItem(key, name); }catch(_){}
+    try{
+      if(window.AndroidNative && AndroidNative.setThemeColors){
+        const style = getComputedStyle(document.documentElement);
+        AndroidNative.setThemeColors(style.getPropertyValue('--bg').trim(), style.getPropertyValue('--panel').trim());
+      }
+    }catch(_){}
+  };
+  let saved = 'classic';
+  try{ saved = localStorage.getItem(key) || 'classic'; }catch(_){}
+  window.setNaimTheme(saved);
+  document.addEventListener('DOMContentLoaded', function(){ window.setNaimTheme(saved); }, {once:true});
+})();
+</script>
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
    NAIM Studio v5 — Phase 1 골조 (skeleton)
@@ -117,6 +145,15 @@
   --row-item-h-mob:32px;
   --genbar-item-h:40px;
 }
+
+html[data-theme="amoled"]{--bg:#000;--panel:#080808;--card:#101010;--card2:#171717;--b1:#292929;--b2:#3a3a3a;--b3:#555;--acc:#ff7043;--acc2:#e9572e;--green:#31d982;--red:#ff536b;--yellow:#ffd54f;--t1:#fff;--t2:#c8c8c8;--t3:#858585;}
+html[data-theme="slate"]{--bg:#111827;--panel:#182234;--card:#202c40;--card2:#29364c;--b1:#3a4962;--b2:#50617b;--b3:#64748b;--acc:#38bdf8;--acc2:#0ea5e9;--green:#4ade80;--red:#fb7185;--yellow:#facc15;--t1:#f8fafc;--t2:#cbd5e1;--t3:#94a3b8;}
+html[data-theme="nord"]{--bg:#242933;--panel:#2e3440;--card:#3b4252;--card2:#434c5e;--b1:#4c566a;--b2:#60718c;--b3:#71829d;--acc:#88c0d0;--acc2:#5e81ac;--green:#a3be8c;--red:#bf616a;--yellow:#ebcb8b;--t1:#eceff4;--t2:#d8dee9;--t3:#9aa7ba;}
+html[data-theme="dracula"]{--bg:#1e1f29;--panel:#282a36;--card:#303341;--card2:#383b4a;--b1:#4d5062;--b2:#6272a4;--b3:#7b86b8;--acc:#bd93f9;--acc2:#986fd0;--green:#50fa7b;--red:#ff5555;--yellow:#f1fa8c;--t1:#f8f8f2;--t2:#d7d7e0;--t3:#9294a6;}
+html[data-theme="cyberpunk"]{--bg:#080b1a;--panel:#10152a;--card:#171d37;--card2:#202746;--b1:#35405f;--b2:#00b8d4;--b3:#ff3cac;--acc:#00e5ff;--acc2:#00a9bd;--green:#69ff94;--red:#ff3cac;--yellow:#fcee0a;--t1:#f5fbff;--t2:#b8c8df;--t3:#7186a5;}
+html[data-theme="forest"]{--bg:#0c1712;--panel:#13231b;--card:#1a3025;--card2:#203b2d;--b1:#315541;--b2:#47745a;--b3:#609271;--acc:#6fcf97;--acc2:#42a86c;--green:#8ee3a7;--red:#ef6f6c;--yellow:#e7c66b;--t1:#eef8f1;--t2:#bfd6c7;--t3:#7fa08a;}
+html[data-theme="wine"]{--bg:#1b1018;--panel:#281722;--card:#351e2d;--card2:#422538;--b1:#60364f;--b2:#7d4767;--b3:#995b7b;--acc:#f472b6;--acc2:#d94d95;--green:#76d7a4;--red:#fb7185;--yellow:#f5c26b;--t1:#fff1f7;--t2:#dfbdcd;--t3:#a4768d;}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px;}
 
 /* ═══════════════════════════════════════════════════════════════
    리셋
@@ -4392,6 +4429,23 @@ body.nw-swap-mode .nw-shelf-card{opacity:.4; pointer-events:none;}
     <button class="cfg-close" onclick="NAIM.cfg.close()" title="닫기">✕</button>
   </div>
   <div class="cfg-body">
+
+  <div class="cfg-section">
+    <div class="cfg-row">
+      <label class="cfg-label" for="cfg-theme-select">색상 테마</label>
+      <select class="inp" id="cfg-theme-select" onchange="setNaimTheme(this.value)" style="width:150px;">
+        <option value="classic">기본 Midnight</option>
+        <option value="amoled">AMOLED</option>
+        <option value="slate">Slate</option>
+        <option value="nord">Nord</option>
+        <option value="dracula">Dracula</option>
+        <option value="cyberpunk">Cyberpunk</option>
+        <option value="forest">Forest</option>
+        <option value="wine">Wine Rose</option>
+      </select>
+    </div>
+    <div class="cfg-hint">선택한 테마는 이 기기에 저장됩니다.</div>
+  </div>
 
     <!-- Phase 37 — API 키 입력 (cfg-panel 최상단) -->
     <div class="cfg-section">
@@ -11212,6 +11266,7 @@ function toggleVariety(){
     processing = true;
     if(state !== 'paused') state = 'running';
     render();
+    try{ if(window.AndroidNative && AndroidNative.generationStarted) AndroidNative.generationStarted(); }catch(_){}
 
     while(items.length > 0){
       // 일시정지면 sleep 무한 (state 가 바뀌면 빠짐)
@@ -11324,6 +11379,7 @@ function toggleVariety(){
     state = 'idle';
     render();
     _persist();
+    try{ if(window.AndroidNative && AndroidNative.generationFinished) AndroidNative.generationFinished(); }catch(_){}
   }
 
   /* 치명적 에러 분류 — 큐 자동 정지 대상 */
@@ -12534,13 +12590,10 @@ function toggleVariety(){
   /* v4 line 7436~7535 showExif byte-match — 모달 빌드 + _exifData 채움 */
   function _showExif(meta){
     _exifData = {};
-    let parsed = {};
-    const prompt = meta['Description'] || '';
-    let neg = '';
-
-    if(meta['Comment']){
-      try{ parsed = JSON.parse(meta['Comment']); neg = parsed.uc || ''; }catch(e){}
-    }
+    const normalized = window.NAIMExif ? window.NAIMExif.parse(meta) : null;
+    let parsed = normalized ? normalized.raw : {};
+    const prompt = normalized ? normalized.prompt : (meta['Description'] || '');
+    const neg = normalized ? normalized.negativePrompt : '';
 
     // ── 프롬프트 ──
     _exifData.prompt = prompt;
@@ -12551,22 +12604,12 @@ function toggleVariety(){
     document.getElementById('exifNeg').textContent = neg || '—';
 
     // ── 캐릭터 (v4 line 7456~7474 적응) ──
-    let charList = parsed.characterPrompts || parsed.characters || [];
-    if(!charList.length && parsed.v4_prompt && parsed.v4_prompt.caption && parsed.v4_prompt.caption.char_captions){
-      const negChars = (parsed.v4_negative_prompt && parsed.v4_negative_prompt.caption && parsed.v4_negative_prompt.caption.char_captions) || [];
-      charList = parsed.v4_prompt.caption.char_captions.map((ch, i) => ({
-        prompt: ch.char_caption || '',
-        uc: (negChars[i] && negChars[i].char_caption) || '',
-        pos: (ch.centers && ch.centers[0]) ? {x: ch.centers[0].x, y: ch.centers[0].y} : {x:0.5, y:0.5}
-      }));
-    }
-    _exifData.useCoords = (parsed.v4_prompt && parsed.v4_prompt.use_coords) !== undefined
-      ? parsed.v4_prompt.use_coords
-      : false;
+    const charList = normalized ? normalized.characters : [];
+    _exifData.useCoords = normalized ? normalized.useCoords : false;
     _exifData.chars = charList;
     document.getElementById('exg_char_wrap').style.display = '';
     document.getElementById('exifCharList').innerHTML = charList.length
-      ? charList.map((ch, i) => `<div class="exif-item">C${i+1}: <span>${esc((ch.prompt || ch.char_caption || '').slice(0, 60))}</span></div>`).join('')
+      ? charList.map((ch, i) => `<div class="exif-item"><strong>C${i+1}</strong><div class="exif-pbox">${esc(ch.prompt || '')}</div>${ch.uc ? `<div class="exif-pbox" style="margin-top:4px;color:var(--t2);">NEG: ${esc(ch.uc)}</div>` : ''}</div>`).join('')
       : '<div class="exif-item" style="color:var(--t3);">이미지에 캐릭터 데이터 없음</div>';
 
     // ── 설정 (v4 line 7476~7522 byte-match — fn 클로저 포함) ──
