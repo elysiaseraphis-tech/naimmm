@@ -46,7 +46,7 @@ window.NAIMExif = (function(){
     const center = Array.isArray(centers) ? centers[0] : centers;
     const negativeValue = ch.uc || ch.neg || ch.negative_prompt || ch.negative;
     return {
-      prompt:firstText(ch, ['prompt','char_caption','positive_prompt','positive','caption','text']),
+      prompt:firstText(ch, ['prompt','char_caption','positive_prompt','positive','caption','character','name','text']),
       uc:firstText(negativeValue, ['uc','neg','negative_prompt','negative','caption','text','prompt','char_caption']) ||
          firstText(negative, ['uc','neg','negative_prompt','negative','char_caption','caption','text']),
       pos:center && Number.isFinite(Number(center.x)) && Number.isFinite(Number(center.y))
