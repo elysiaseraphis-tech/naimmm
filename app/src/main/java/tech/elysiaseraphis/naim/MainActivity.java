@@ -19,6 +19,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -29,6 +30,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.io.IOException;
 import java.util.Base64;
 
 public final class MainActivity extends Activity {
@@ -47,10 +49,8 @@ public final class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
+        settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         settings.setMediaPlaybackRequiresUserGesture(false);
 
@@ -74,9 +74,27 @@ public final class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
-                if ("file".equals(uri.getScheme())) return false;
+                if ("appassets.androidplatform.net".equals(uri.getHost())) return false;
                 startActivity(new Intent(Intent.ACTION_VIEW, uri));
                 return true;
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if (!"appassets.androidplatform.net".equals(uri.getHost())) return null;
+                String path = uri.getPath();
+                if (path == null || path.contains("..")) return null;
+                if (path.startsWith("/")) path = path.substring(1);
+                if (path.isEmpty()) path = "index.html";
+                String mime = path.endsWith(".js") ? "application/javascript"
+                        : path.endsWith(".json") ? "application/json"
+                        : path.endsWith(".png") ? "image/png" : "text/html";
+                try {
+                    return new WebResourceResponse(mime, "UTF-8", getAssets().open(path));
+                } catch (IOException error) {
+                    return null;
+                }
             }
 
             @Override
@@ -108,7 +126,7 @@ public final class MainActivity extends Activity {
         });
 
         if (savedInstanceState == null) {
-            webView.loadUrl("file:///android_asset/index.html");
+            webView.loadUrl("https://appassets.androidplatform.net/index.html");
         } else {
             webView.restoreState(savedInstanceState);
         }
