@@ -6,9 +6,10 @@
    캐시 버전 올리면 구버전 캐시 자동 정리. */
 'use strict';
 
-var CACHE = 'naim-v5-1';
+var CACHE = 'naim-v5-pair-rotate-1';
 var CORE = [
-  './NAIM_Studio_v5.html',
+  './NAIM_Studio_v5_pair_rotate%20(9).html',
+  './exif-metadata.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -57,7 +58,7 @@ self.addEventListener('fetch', function(e){
         return res;
       }).catch(function(){
         return caches.match(req).then(function(m){
-          return m || caches.match('./NAIM_Studio_v5.html');
+          return m || caches.match('./NAIM_Studio_v5_pair_rotate%20(9).html');
         });
       })
     );

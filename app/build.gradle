@@ -1,0 +1,33 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "tech.elysiaseraphis.naim"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "tech.elysiaseraphis.naim"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+}
+
+def generatedAssets = layout.buildDirectory.dir("generated/assets/main")
+
+tasks.register("syncWebAssets", Copy) {
+    into(generatedAssets)
+    from(rootProject.file("NAIM_Studio_v5_pair_rotate (9).html")) {
+        rename { "index.html" }
+    }
+    from(rootProject.file("exif-metadata.js"))
+    from(rootProject.file("manifest.json"))
+    from(rootProject.file("sw.js"))
+    from(rootProject.file("icon-192.png"))
+    from(rootProject.file("icon-512.png"))
+}
+
+android.sourceSets.main.assets.srcDir(generatedAssets)
+tasks.named("preBuild").configure { dependsOn("syncWebAssets") }
