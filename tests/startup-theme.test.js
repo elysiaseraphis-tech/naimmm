@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '../NAIM_Studio_v5_pair_rotate (9).html'), 'utf8');
-const themeScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+const themeScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)]
   .find((match) => match[1].includes("const key = 'naim_color_theme';"));
 assert.ok(themeScript, 'startup theme script exists');
 assert.ok(themeScript.index < html.indexOf('<style>'), 'theme initializes before CSS is parsed');
