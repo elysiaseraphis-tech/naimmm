@@ -19,7 +19,81 @@
      msgpack: NAI 응답 기본 형식 (스트림 디코딩) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://unpkg.com/@msgpack/msgpack" crossorigin></script>
-<script src="exif-metadata.js"></script>
+<script>
+/* 단일 HTML로 직접 열어도 EXIF 캐릭터 파싱이 동작해야 하므로 외부 파일에 의존하지 않는다. */
+window.NAIMExif = (function(){
+  'use strict';
+
+  function firstText(value, keys){
+    if(typeof value === 'string') return value;
+    if(!value || typeof value !== 'object') return '';
+    for(const key of keys){
+      const found = value[key];
+      if(typeof found === 'string') return found;
+      if(found && typeof found === 'object'){
+        const nested = firstText(found, keys);
+        if(nested) return nested;
+      }
+    }
+    return '';
+  }
+
+  function normalizeCharacter(ch, negative){
+    if(typeof ch === 'string') ch = {prompt:ch};
+    ch = ch && typeof ch === 'object' ? ch : {};
+    negative = negative && typeof negative === 'object' ? negative : {};
+    const centers = ch.centers || (ch.position && [ch.position]) || [];
+    const center = Array.isArray(centers) ? centers[0] : centers;
+    const negativeValue = ch.uc || ch.neg || ch.negative_prompt || ch.negative;
+    return {
+      prompt:firstText(ch, ['prompt','char_caption','positive_prompt','positive','caption','text']),
+      uc:firstText(negativeValue, ['uc','neg','negative_prompt','negative','caption','text','prompt','char_caption']) ||
+         firstText(negative, ['uc','neg','negative_prompt','negative','char_caption','caption','text']),
+      pos:center && Number.isFinite(Number(center.x)) && Number.isFinite(Number(center.y))
+        ? {x:Number(center.x), y:Number(center.y)}
+        : {x:0.5, y:0.5}
+    };
+  }
+
+  function parse(meta){
+    meta = meta && typeof meta === 'object' ? meta : {};
+    let raw = {};
+    if(meta.Comment && typeof meta.Comment === 'string'){
+      try{ raw = JSON.parse(meta.Comment); }catch(_){}
+    }else if(meta.Comment && typeof meta.Comment === 'object'){
+      raw = meta.Comment;
+    }
+
+    const positiveCaption = raw.v4_prompt && raw.v4_prompt.caption;
+    const negativeCaption = raw.v4_negative_prompt && raw.v4_negative_prompt.caption;
+    const prompt = meta.Description || firstText(raw, ['input','prompt','caption','text']) ||
+      firstText(positiveCaption, ['base_caption','caption','prompt']);
+    const negativePrompt = firstText(raw, ['uc','negative_prompt','caption','text']) ||
+      firstText(negativeCaption, ['base_caption','caption','prompt']);
+
+    let characters = raw.characterPrompts;
+    if(!Array.isArray(characters) || characters.length === 0) characters = raw.characters;
+    let negatives = [];
+    if(!Array.isArray(characters) || characters.length === 0){
+      characters = positiveCaption && positiveCaption.char_captions;
+      negatives = (negativeCaption && negativeCaption.char_captions) || [];
+    }
+    characters = Array.isArray(characters) ? characters : [];
+
+    return {
+      raw,
+      prompt:prompt || '',
+      negativePrompt:negativePrompt || '',
+      characters:characters.map((ch, index)=>normalizeCharacter(ch, negatives[index])),
+      useCoords:raw.v4_prompt && raw.v4_prompt.use_coords !== undefined
+        ? !!raw.v4_prompt.use_coords
+        : false
+    };
+  }
+
+  return {parse, normalizeCharacter};
+})();
+</script>
 <script>
 (function(){
   const key = 'naim_color_theme';
