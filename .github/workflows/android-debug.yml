@@ -6,6 +6,7 @@ on:
     paths:
       - "NAIM_Studio_v5_pair_rotate (9).html"
       - "exif-metadata.js"
+      - "tests/**"
       - "app/**"
       - "gradle/**"
       - "*.gradle"
@@ -15,6 +16,7 @@ on:
     paths:
       - "NAIM_Studio_v5_pair_rotate (9).html"
       - "exif-metadata.js"
+      - "tests/**"
       - "app/**"
       - "gradle/**"
       - "*.gradle"
@@ -34,8 +36,8 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
-      - name: Test metadata parser
-        run: node --test tests/exif-metadata.test.js
+      - name: Test metadata parser and startup theme
+        run: node --test tests/*.test.js
       - name: Build debug APK
         run: ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4

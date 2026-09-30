@@ -237,6 +237,9 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void setThemeColors(String status, String navigation) {
+            if (status == null || navigation == null || status.trim().isEmpty() || navigation.trim().isEmpty()) {
+                return;
+            }
             runOnUiThread(() -> {
                 try {
                     getWindow().setStatusBarColor(Color.parseColor(status));

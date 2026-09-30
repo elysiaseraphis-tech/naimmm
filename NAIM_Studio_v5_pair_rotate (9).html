@@ -111,7 +111,9 @@ window.NAIMExif = (function(){
     try{
       if(window.AndroidNative && AndroidNative.setThemeColors){
         const style = getComputedStyle(document.documentElement);
-        AndroidNative.setThemeColors(style.getPropertyValue('--bg').trim(), style.getPropertyValue('--panel').trim());
+        const status = style.getPropertyValue('--bg').trim();
+        const navigation = style.getPropertyValue('--panel').trim();
+        if(status && navigation) AndroidNative.setThemeColors(status, navigation);
       }
     }catch(_){}
   };

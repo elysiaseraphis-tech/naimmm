@@ -27,6 +27,12 @@ Git에 포함하지 않습니다.
 GitHub Actions의 **Android debug APK** 워크플로를 수동 실행하거나 PR/관련 파일
 변경 시 실행하면 `naim-studio-debug-apk` artifact를 받을 수 있습니다.
 
+1.0.1에서는 시작 시 CSS가 로드되기 전에 빈 테마 색상이 Android로 전달되는
+경로를 차단했습니다. Android 쪽에서도 null·빈 색상값을 무시합니다.
+기존 설치와 서명 키가 같으면 업데이트할 수 있지만, CI debug APK는 실행마다
+서명 키가 달라질 수 있습니다. 설치가 충돌하더라도 데이터 백업 없이 기존 앱을
+삭제하지 마세요. 빌드 성공과 실제 기기의 실행 확인은 별개입니다.
+
 ## Android 동작
 
 - WebView에서 JavaScript, IndexedDB/localStorage, 이미지/파일 선택, 다운로드,
@@ -50,9 +56,9 @@ foreground service는 WebView 프로세스가 백그라운드에서 중단될 �
 
 ## 테스트
 
-EXIF/NovelAI 메타데이터의 다중 슬롯, 긴 프롬프트, 중첩 positive/negative 구조는
-Node 내장 테스트로 검증합니다.
+EXIF/NovelAI 메타데이터의 다중 슬롯, 긴 프롬프트, 중첩 positive/negative 구조와
+CSS 로드 전후의 시작 테마 전달은 Node 내장 테스트로 검증합니다.
 
 ```bash
-node --test tests/exif-metadata.test.js
+node --test tests/*.test.js
 ```
