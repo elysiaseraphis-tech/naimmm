@@ -35,6 +35,9 @@ GitHub Actions의 **Android debug APK** 워크플로를 수동 실행하거나 P
 
 ## Android 동작
 
+- 1.0.3에서는 업로드된 `5pAk0.png`를 Android 적응형 런처 아이콘으로 적용했습니다.
+  원본은 `app/src/main/res/drawable-nodpi/launcher_artwork.png`에 보관하며,
+  원형·둥근 사각형 등 런처 모양에 맞춰 표시됩니다.
 - 1.0.2에서는 일반 모드에서 상태바·내비게이션바·디스플레이 컷아웃을 피하도록
   WebView 영역을 조정합니다. 앱의 **FULL** 토글은 Android 시스템 바를 숨기는
   몰입 모드로 연결되며, 뒤로가기로 해제할 수 있습니다. 키보드와 컷아웃 영역은
