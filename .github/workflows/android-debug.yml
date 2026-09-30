@@ -21,6 +21,9 @@ on:
       - "gradlew"
       - ".github/workflows/android-debug.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
